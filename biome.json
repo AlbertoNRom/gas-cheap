@@ -8,18 +8,14 @@
   "formatter": {
     "enabled": true,
     "formatWithErrors": false,
-    "indentStyle": "space",
     "indentWidth": 2,
     "lineEnding": "lf",
-    "lineWidth": 80
+    "lineWidth": 100
   },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
-      "suspicious": {
-        "noArrayIndexKey": "off"
-      }
+      "recommended": true
     }
   },
   "javascript": {
@@ -27,11 +23,11 @@
       "jsxQuoteStyle": "double",
       "quoteProperties": "asNeeded",
       "trailingCommas": "es5",
-      "semicolons": "always",
+      "semicolons": "asNeeded",
       "arrowParentheses": "always",
       "bracketSpacing": true,
       "bracketSameLine": false,
-      "quoteStyle": "single"
+      "quoteStyle": "double"
     }
   }
 }

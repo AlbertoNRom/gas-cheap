@@ -1,15 +1,17 @@
 "use client"
 
 import { Clock, Fuel, MapPin, Star } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect } from "react"
 import { GasStationCard } from "@/components/GasStationCard"
-import { GasStationSkeleton, PrioritySelectorSkeleton } from "@/components/Skeleton"
+import { GasStationSkeleton, PrioritySelectorSkeleton, Skeleton } from "@/components/Skeleton"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
+import { useGasStationFinderReducer } from "@/hooks/useGasStationFinderReducer"
 import { useGeolocation } from "@/hooks/useGeolocation"
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll"
 import { getGasStations } from "@/services/gasStationService"
-import type { GasStation, PriorityType } from "@/types"
+import type { PriorityType } from "@/types"
 
 export function GasStationFinder() {
 	const {
@@ -18,27 +20,27 @@ export function GasStationFinder() {
 		loading: locationLoading,
 		requestLocation,
 	} = useGeolocation()
-	const [priority, setPriority] = useState<PriorityType>("price")
-	const [gasStations, setGasStations] = useState<GasStation[]>([])
-	const [loading, setLoading] = useState(false)
-	const [searchError, setSearchError] = useState<string | null>(null)
+	const [state, dispatch] = useGasStationFinderReducer()
+	const handleLoadMore = useCallback(() => dispatch({ type: "INCREASE_VISIBLE" }), [dispatch])
+	const { sentinelRef } = useInfiniteScroll({
+		canLoadMore: state.visibleCount < state.gasStations.length,
+		loading: state.loading,
+		onLoadMore: handleLoadMore,
+		rootMargin: "300px",
+	})
 
 	const fetchGasStations = useCallback(async () => {
 		if (!location) return
 
-		setLoading(true)
-		setSearchError(null)
-
+		dispatch({ type: "FETCH_START" })
 		try {
-			const stations = await getGasStations(location, priority, 15)
-			setGasStations(stations)
+			const stations = await getGasStations(location, state.priority, 15)
+			dispatch({ type: "FETCH_SUCCESS", payload: stations })
 		} catch (error) {
-			setSearchError("Error al buscar gasolineras. Inténtalo de nuevo.")
 			console.error("Error fetching gas stations:", error)
-		} finally {
-			setLoading(false)
+			dispatch({ type: "FETCH_ERROR", payload: "Error al buscar gasolineras. Inténtalo de nuevo." })
 		}
-	}, [location, priority])
+	}, [location, state.priority, dispatch])
 
 	useEffect(() => {
 		if (location) {
@@ -47,14 +49,17 @@ export function GasStationFinder() {
 	}, [location, fetchGasStations])
 
 	useEffect(() => {
-		// Request location on component mount
 		if (!location && !locationLoading && !locationError) {
 			requestLocation()
 		}
 	}, [location, locationLoading, locationError, requestLocation])
 
+	useEffect(() => {}, [])
+
 	const handlePriorityChange = (checked: boolean) => {
-		setPriority(checked ? "distance" : "price")
+		const priorityMap: Record<"true" | "false", PriorityType> = { true: "distance", false: "price" }
+		const nextPriority = priorityMap[String(checked) as "true" | "false"]
+		dispatch({ type: "SET_PRIORITY", payload: nextPriority })
 	}
 
 	if (locationLoading) {
@@ -100,7 +105,6 @@ export function GasStationFinder() {
 
 	return (
 		<div className="space-y-6">
-			{/* Control de prioridad */}
 			<Card className="card-depth">
 				<CardHeader>
 					<CardTitle className="flex items-center gap-2">
@@ -115,7 +119,9 @@ export function GasStationFinder() {
 								<Fuel className="h-4 w-4" />
 								<span
 									className={
-										priority === "price" ? "font-semibold text-accent" : "text-muted-foreground"
+										state.priority === "price"
+											? "font-semibold text-accent"
+											: "text-muted-foreground"
 									}
 								>
 									Precio más bajo
@@ -125,7 +131,7 @@ export function GasStationFinder() {
 						</div>
 
 						<Switch
-							checked={priority === "distance"}
+							checked={state.priority === "distance"}
 							onCheckedChange={handlePriorityChange}
 							className="data-[state=checked]:bg-accent"
 						/>
@@ -134,7 +140,9 @@ export function GasStationFinder() {
 							<div className="flex items-center gap-2 justify-end">
 								<span
 									className={
-										priority === "distance" ? "font-semibold text-accent" : "text-muted-foreground"
+										state.priority === "distance"
+											? "font-semibold text-accent"
+											: "text-muted-foreground"
 									}
 								>
 									Distancia más corta
@@ -149,35 +157,34 @@ export function GasStationFinder() {
 				</CardContent>
 			</Card>
 
-			{/* Lista de gasolineras */}
 			<div className="space-y-4">
 				<div className="flex items-center justify-between">
 					<h2 className="text-xl font-semibold">
-						Gasolineras {priority === "price" ? "más baratas" : "más cercanas"}
+						Gasolineras {state.priority === "price" ? "más baratas" : "más cercanas"}
 					</h2>
-					{gasStations.length > 0 && (
+					{state.gasStations.length > 0 && (
 						<p className="text-sm text-muted-foreground">
-							{gasStations.length} resultados encontrados
+							{state.gasStations.length} resultados encontrados
 						</p>
 					)}
 				</div>
 
-				{loading ? (
+				{state.loading ? (
 					<div className="space-y-6">
 						<GasStationSkeleton />
 					</div>
-				) : searchError ? (
+				) : state.error ? (
 					<Card className="card-depth">
 						<CardContent className="pt-6">
 							<div className="text-center space-y-2">
-								<p className="text-destructive">{searchError}</p>
+								<p className="text-destructive">{state.error}</p>
 								<Button onClick={fetchGasStations} variant="outline">
 									Reintentar
 								</Button>
 							</div>
 						</CardContent>
 					</Card>
-				) : gasStations.length === 0 ? (
+				) : state.gasStations.length === 0 ? (
 					<Card className="card-depth">
 						<CardContent className="pt-6">
 							<div className="text-center space-y-2">
@@ -188,14 +195,23 @@ export function GasStationFinder() {
 					</Card>
 				) : (
 					<div className="grid gap-4">
-						{gasStations.map((station, index) => (
+						{state.gasStations.slice(0, state.visibleCount).map((station, index) => (
 							<GasStationCard
 								key={station.id}
 								station={station}
-								priority={priority}
+								priority={state.priority}
 								rank={index + 1}
 							/>
 						))}
+						<div ref={sentinelRef} className="h-8" />
+						{state.visibleCount < state.gasStations.length && (
+							<div className="flex items-center justify-center py-2">
+-                <Clock className="h-4 w-4 animate-pulse text-muted-foreground" />
+-                <span className="ml-2 text-sm text-muted-foreground">Cargando más...</span>
++                <Skeleton className="h-4 w-4 rounded-full" />
++                <Skeleton className="h-4 w-24 ml-2" />
+              </div>
+            )}
 					</div>
 				)}
 			</div>
